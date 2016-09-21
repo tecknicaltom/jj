@@ -1,4 +1,5 @@
 # Makefile for jj
+CFLAGS ?= -Wall
 cflags = $(CFLAGS)\
 	`pkg-config --cflags loudmouth-1.0`\
 

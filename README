@@ -10,11 +10,10 @@ directory which jj creates.
 
 Quick getting started guide
 
-Latest official jj version is 1. It can be downloaded here:
-http://23.fi/jj/jj-1.tar.gz .
+Latest official jj version can be dowloaded from http://23.fi/jj
 
-The development version can be cloned with git from jj's github page (
-https://github.com/Petteri/jj ).
+The development version can be cloned with git from jj's github page:
+http://github.com/Petteri/jj
 
 To compile jj you need loudmouth and glib development libraries. On Debian
 install these packages:
@@ -93,7 +92,13 @@ created for the user
 ./jj -s server.tld -j user@server.tld -u user -p password -m User
 echo "/msg petteri@jabber.ru hello" > server.tld/in
 tail -f server.tld/petteri@jabber.ru/out
-echo "Petteri are you getting the messages?" > server.tld/petteri@jabber.ru/out
+echo "Petteri are you getting the messages?" > server.tld/petteri@jabber.ru/in
+
+Bot
+
+Jj might be best used as a bot. I wrote a short introduction on how I
+am using it, that will hopefully give some hints on how to build your
+own bot. See: http://23.fi/blogi/l7lAK
 
 Source Code Repository and Issue tracker
 
@@ -112,4 +117,4 @@ XMPP messages to petteri jabber ru. You can also support jj with Bitcoin
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 xmpp: petteri jabber ru
-Last modified: Mon Jul 11 15:53:08 EEST 2011
+Last modified: Fri Jul 13 14:29:10 EEST 2012

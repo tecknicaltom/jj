@@ -1,7 +1,7 @@
 /*
   jj a FIFO and filesystem based Jabber/XMPP client.
 
-  Copyright (C) 2009-2011 Petteri Klemola
+  Copyright (C) 2009-2012 Petteri Klemola
 
   jj is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 3 as
@@ -60,6 +60,7 @@ static GMainLoop *jj_main_loop;
 static GMainContext *jj_context;
 static LmConnection *jj_connection;
 
+static gboolean status_enabled;
 
 typedef struct {
         gchar *name;
@@ -369,9 +370,10 @@ static gchar *jj_get_jid(gchar *input) {
         g_strfreev(tmp);
 
         /* simple validation */
-        if (strchr(jid, '@') != NULL || strlen(jid) > 3) {
+        if (strchr(jid, '@') != NULL && strlen(jid) > 3) {
                 return jid;
         }
+        g_free(jid);
         return NULL;
 }
 
@@ -379,7 +381,7 @@ static gchar *jj_get_jid(gchar *input) {
 static void jj_writeout(char *path, char *fmt, ...) {
         FILE *output;
         va_list ap;
-        char outstr[200] = "23:23";
+        char outstr[200] = "1989-05-23 23:23:23";
         time_t t;
         struct tm *tmp;
         char *without_suffix = NULL;
@@ -422,7 +424,7 @@ static void jj_writeout(char *path, char *fmt, ...) {
                 if (tmp == NULL) {
                         jj_error("localtime\n");
                 } else {
-                        if (strftime(outstr, sizeof(outstr), "%H:%M", tmp) == 0) {
+                        if (strftime(outstr, sizeof(outstr), "%F %T", tmp) == 0) {
                                 jj_error("strftime returned 0\n");
                         }
                 }
@@ -441,18 +443,13 @@ static void jj_writeout(char *path, char *fmt, ...) {
         jj_writeout(jj_user.server_out, __VA_ARGS__)
 
 
-/* Send message to channel with printf style. */
 static void jj_send_message_1(LmMessageSubType stype,
-                              const gchar *jid, const gchar *fmt, ...) {
-        char *msg;
+                              const gchar *jid, const gchar *msg) {
         LmMessage *m;
-        va_list ap;
         gchar *xml;
 
         jj_debug("jid=%s\n", jid);
 
-        va_start(ap, fmt);
-        g_vasprintf(&msg, fmt, ap);
         m = lm_message_new_with_sub_type(jid,
                                          LM_MESSAGE_TYPE_MESSAGE,
                                          stype);
@@ -463,19 +460,20 @@ static void jj_send_message_1(LmMessageSubType stype,
         } else {
                 jj_debug("Sent message:'%s'\n", xml);
         }
-        va_end(ap);
         lm_message_unref(m);
         g_free(xml);
-        free(msg);
+
 }
 
 
-#define jj_send_message(...)                                            \
-        jj_send_message_1(LM_MESSAGE_SUB_TYPE_CHAT, __VA_ARGS__)
+static inline void jj_send_message(const gchar *jid, const gchar *msg) {
+        return jj_send_message_1(LM_MESSAGE_SUB_TYPE_CHAT, jid, msg);
+}
 
 
-#define jj_send_message_to_muc(...)                                     \
-        jj_send_message_1(LM_MESSAGE_SUB_TYPE_GROUPCHAT, __VA_ARGS__)
+static inline void jj_send_message_to_muc(const gchar *jid, const gchar *msg) {
+        return jj_send_message_1(LM_MESSAGE_SUB_TYPE_GROUPCHAT, jid, msg);
+}
 
 
 /* Queries muc information from server. This is done when we are first
@@ -578,7 +576,7 @@ static void jj_send_ver(char *to, char* id) {
         lm_message_node_add_child(node, "name",
                                   "jj");
         lm_message_node_add_child(node, "version",
-                                  "1");
+                                  "2");
 
         lm_message_node_add_child(node, "os", "Debian GNU/Linux");
         lm_connection_send(jj_connection, msg, NULL);
@@ -677,7 +675,6 @@ static LmHandlerResult jj_handle_presence(LmMessageHandler *handler,
         gchar *muc_user;
         gchar *xml;
         gchar *xml2;
-        gchar *presence;
         const gchar *show;
         const gchar *status;
         const gchar *from;
@@ -741,16 +738,18 @@ static LmHandlerResult jj_handle_presence(LmMessageHandler *handler,
         }
         } /* switch */
 
-        if (muc_node) {
-                path = g_strconcat(jj_user.base_path, "/mucs/", from, "/status", NULL);
-        } else {
-                path = g_strconcat(jj_user.base_path, "/", fromv[0], "/status", NULL);
+        if (status_enabled) {
+                if (muc_node) {
+                        path = g_strconcat(jj_user.base_path, "/mucs/", from, "/status", NULL);
+                } else {
+                        path = g_strconcat(jj_user.base_path, "/", fromv[0], "/status", NULL);
+                }
+                show = jj_get_show(m);
+                status = jj_get_status(m);
+                jj_writeout(path, "%s %s %s\n", jj_get_msg_subtype_str(m),
+                            show ? show : "", status ? status : "");
+                g_free(path);
         }
-        show = jj_get_show(m);
-        status = jj_get_status(m);
-        jj_writeout(path, "%s %s %s\n", jj_get_msg_subtype_str(m),
-                    show ? show : "", status ? status : "");
-        g_free(path);
         g_strfreev(fromv);
         g_free(xml);
         return LM_HANDLER_RESULT_REMOVE_MESSAGE;
@@ -1096,7 +1095,8 @@ void jj_usage(char *pname) {
   -j jabber id\n\
   -u username\n\
   -p password\n\
-  -m muc username\n");
+  -m muc username\n\
+  -n <disables status output writing to file>\n");
         exit(EXIT_SUCCESS);
 }
 
@@ -1113,8 +1113,10 @@ int main(int argc, char *argv[]) {
         int option;
         char *pname = argv[0];
 
+        status_enabled = TRUE;
+
         /* Parse command line options */
-        while ((option = getopt(argc, argv, "s:j:p:u:m:")) != -1) {
+        while ((option = getopt(argc, argv, "s:j:p:u:m:n")) != -1) {
                 switch (option) {
                 case 's':
                         if (optarg) {
@@ -1139,6 +1141,10 @@ int main(int argc, char *argv[]) {
                         if (optarg) {
                                 sscanf(optarg, "%s", muc_username);
                         }
+                        break;
+                case 'n':
+                        status_enabled = FALSE;
+                        jj_printf("status output disabled\n");
                         break;
                 default:
                         jj_usage(pname);

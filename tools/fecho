@@ -17,7 +17,7 @@ fifo_echo() {
     MSG="$1"
     FIFOFILE="$2"
     if [ -p $FIFOFILE ]; then
-        echo $MSG > $FIFOFILE &
+        echo "$MSG" > $FIFOFILE &
         PID=$!
         sleep 2
         kill $PID > /dev/null 2>&1 || true
